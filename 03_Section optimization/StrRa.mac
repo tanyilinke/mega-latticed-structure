@@ -1,0 +1,33 @@
+
+MYY1=MY1
+MYY2=MY2
+*IF,ABS(MY1),LE,ABS(MY2),THEN
+   MYY1=MY2
+   MYY2=MY1
+*endIF
+Betamy=0.65+0.35*MYY2/MYY1    !Note that ansys bending moment positive and negative signs according to the mechanics of materials
+!Betaty=0.65+0.35*MYY2/MYY1   !Equivalent moment coefficients outside the plane of action of bending moments are not considered for aluminum alloy members.
+
+MZZ1=MZ1
+MZZ2=MZ2
+*IF,ABS(MZ1),LE,ABS(MZ2),THEN
+MZZ1=MZ2
+MZZ2=MZ1
+*endIF
+Betamz=0.65+0.35*MZZ2/MZZ1
+!Betatz=0.65+0.35*MZZ2/MZZ1
+
+*IF,AxiForce,LE,O,THEN       !For compression rods, the stabilizing and strength stress ratios are determined, see the 07th edition of the Structural Design Specification for Aluminum Alloys 8.2.
+   StrRa1=ABS(AxiForce)/(StaCoe*AreaSec*Fd)+Betamy*MAXMY/(1.0*IMd*(1-0.75*ABS(AxiForce)/AxiFex)*Fd)+0.7*MAXMZ/(1.0*IMd*Fd) 
+   StrRa2=ABS(AxiForce)/(StaCoe*AreaSec*Fd)+0.7*MAXMY/(1.0*IMd*Fd)+Betamz*MAXMZ/(1.0*IMd*(1-0.75*ABS(AxiForce)/AxiFex)*Fd)
+   StrRa3=ABS(AxiForce)/(AreaSec*Fd)+MAXMY/(1.0*IMd*Fd)+MAXMZ/(1.0*IMd*Fd)
+   StrRa=StrRa1
+   *IF,StrRa,LE,StrRa2,THEN
+      StrRa=StrRa2
+   *ENDIF
+   *IF,StrRa,LE,StrRa3,THEN
+      StrRa=StrRa3
+   *ENDIF  
+*ELSE                       !For tie rods, the strength-to-stress ratio is judged to be
+   StrRa=ABS(AxiForce)/(AreaSec*Fd)+MAXMY/(1.0*IMd*Fd)+MAXMZ/(1.0*IMd*Fd)
+*ENDIF   

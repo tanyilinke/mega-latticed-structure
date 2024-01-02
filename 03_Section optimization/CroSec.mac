@@ -1,0 +1,19 @@
+!Roughly divided rod section
+RW1=0.90000          !Outer diameter of the upper chord
+T1=0.02400           !Thickness of the upper chord
+RW2=1.6000           !Outer diameter of the lower chord
+T2=0.05300           !Thickness of the lower chord
+RW3=0.48000          !Outer diameter of the web
+T3=0.01200           !Thickness of the web
+RW4=0.33000          !Outer diameter of the top chord crossbar
+T4=0.010000          !Thickness of the top chord crossbar
+RW5=0.39000          !Outer diameter of the upward sloping bar
+T5=0.01000           !Thickness of the upward sloping bar
+
+RW6=0.48000          !Outside diameter of web near the large node
+T6=0.01200           !Thickness of web near the large node
+RW7=1.60000          !Outside diameter of lower chord near the large node
+T7=0.05300           !Thickness of lower chord near the large node
+
+JR1=0.93000          !Outside diameter of angular cone node rod
+JT1=0.0240           !Thickness of angular cone node rod

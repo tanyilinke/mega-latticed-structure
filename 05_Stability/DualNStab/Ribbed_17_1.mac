@@ -1,0 +1,1086 @@
+!Improved Ribbed type（2022.12.24）
+FINISH         
+/CLEAR,START    
+!/FILENAME,MainPro  
+*AFUN,DEG            !Use units of degrees in the input and output of the angle function
+/UIS,MSGPOP,3        !Block warning messages
+
+!Structural geometric parameters
+SPAN=1000            !Span
+SKB=1/3              !Rise-span ratio
+NF=20                !Number of peaks
+NB=1                 !Number of rods per peak
+NH=NF*NB             !Number of circumferential divisions
+NZ=6                 !Number of radial divisions (note not more than 9)
+
+HL=1/11              !Height-to-length ratio
+ML=1/11              !Internode length to length ratio
+BH=1.1               !Width-to-height ratio
+
+Num_K=NH*(NZ+1)        !Total number of key points
+
+!Import keypoint coordinates, import unit: mm
+*DIM,NodeCor_x,ARRAY,Num_K
+*VREAD,NodeCor_x,Ribbed_17_1_x,txt
+(F12.0)
+
+*DIM,NodeCor_y,ARRAY,Num_K
+*VREAD,NodeCor_y,Ribbed_17_1_y,txt
+(F12.0)
+
+*DIM,NodeCor_z,ARRAY,Num_K
+*VREAD,NodeCor_z,Ribbed_17_1_z,txt
+(F12.0)
+
+
+CroSec        !Import cross-section information
+
+
+/PREP7
+
+
+!Input real constant arrays - radial trusses
+*DIM,TRR,ARRAY,7,NB,NZ       !Separate peaks and valleys
+*DIM,TTK,ARRAY,7,NB,NZ 
+*DO,I,1,NZ
+   *DO,J,1,NB
+      *DO,O,1,7
+         TRR(O,J,I)=R%1000+100*I+10*J+O%
+         TTK(O,J,I)=T%1000+100*I+10*J+O%
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+!Input real constant arrays - circular trusses
+*DIM,DRR,ARRAY,7,NZ+1       
+*DIM,DTK,ARRAY,7,NZ+1 
+*DO,I,1,NZ+1
+   *DO,O,1,7
+      DRR(O,I)=R%2000+100*I+O%
+      DTK(O,I)=T%2000+100*I+O%
+   *ENDDO
+*ENDDO
+
+!Input real constant array - corner cone nodes
+*DIM,JRR,ARRAY,NB,NZ+1        !Separate peaks and valleys
+*DIM,JTK,ARRAY,NB,NZ+1
+*DO,I,1,NZ+1
+   *DO,J,1,NB
+      JRR(J,I)=R%100*I+10*J%
+      JTK(J,I)=T%100*I+10*J%
+   *ENDDO
+*ENDDO
+
+
+!定义单元
+ET,1,BEAM188
+MP,EX,1,0.7E11                    !Aluminum alloy
+MP,PRXY,1,0.3        
+MP,DENS,1,2700*1.2                !Consider joint selfweight
+MP,ALPX,1,2.3E-5
+ME1=0.7E11                        !Elastic modulus
+
+
+!Defining the beam section of a radial truss
+*DO,I,1,NZ
+   *DO,J,1,NB
+      *DO,O,1,7
+         SECTYPE,1000+100*I+10*J+O,BEAM,CTUBE    !The four digits indicate the section number, which are truss type, number of rings, peaks and valleys, and bar type                  
+         SECOFFSET,CENT            !The nodes of the sorghum are placed in the form center of the section
+         SECDATA,TRR(O,J,I)/2-TTK(O,J,I),TRR(O,J,I)/2
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+!Define the beam cross section of a ring truss
+*DO,I,1,NZ+1
+   *DO,O,1,7
+      SECTYPE,2000+100*I+O,BEAM,CTUBE                     
+      SECOFFSET,CENT            
+      SECDATA,DRR(O,I)/2-DTK(O,I),DRR(O,I)/2
+   *ENDDO
+*ENDDO
+
+!定义角锥节点的梁截面
+*DO,I,1,NZ+1
+   *DO,J,1,NB
+      SECTYPE,100*I+10*J,BEAM,CTUBE                     
+      SECOFFSET,CENT          
+      SECDATA,JRR(J,I)/2-JTK(J,I),JRR(J,I)/2
+   *ENDDO
+*ENDDO
+
+
+*DIM,Loc_K,ARRAY,Num_K       !Define an array to record the location of the corner cone nodes (where the ring is located, and the peaks and valleys are recorded for folded plate type mesh shells)
+
+
+CSYS,0          
+
+
+!Generate keypoints, starting from the innermost circle of crest nodes
+!Note the clockwise and counterclockwise import nodes, here clockwise
+*DO,I,1,NZ+1
+   *DO,J,1,NF
+      *DO,O,1,NB
+         X=NodeCor_x((I-1)*NH+(J-1)*NB+O)/1000
+         Y=NodeCor_y((I-1)*NH+(J-1)*NB+O)/1000
+         Z=NodeCor_z((I-1)*NH+(J-1)*NB+O)/1000
+         K,(I-1)*NH+(J-1)*NB+O,X,Y,Z
+         Loc_K((I-1)*NH+(J-1)*NB+O)=100*I+10*O
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+L=DISTKP(NZ*NH+1,(NZ-1)*NH+1)      !Calculate grid size
+!Parameter conversions
+H=HL*L                !Truss height
+M=ML*L                !Internode length
+B=BH*H                !Truss width
+
+CSYS,0
+!Radial rod connection
+*DO,I,1,NZ
+   *DO,J,1,NF
+      *DO,O,1,NB
+         L,(I-1)*NH+(J-1)*NB+O,I*NH+(J-1)*NB+O
+         LATT,1,,,,,,1000+100*I+10*O+2
+         LSEL,U,LINE,,ALL
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+!Circumferential rod connection
+*DO,I,1,NZ+1
+   *DO,J,1,NH-1
+      L,(I-1)*NH+J,(I-1)*NH+J+1
+   *ENDDO
+   L,(I-1)*NH+NH,(I-1)*NH+1
+   LATT,1,,,,,,2000+100*I+2
+   LSEL,U,LINE,,ALL
+*ENDDO
+
+ALLSEL
+*GET,Num_L,LINE,0,COUNT      !Getting the total number of lower chord bars
+
+!Generate outermost node assist bars
+*DO,I,NZ,NZ  
+   *DO,J,1,NF
+      *DO,O,1,NB  
+         KBETW,(I-1)*NH+(J-1)*NB+O,I*NH+(J-1)*NB+O,,RATIO,2
+      *ENDDO
+   *ENDDO
+*ENDDO  
+
+*DO,I,NZ+1,NZ+1
+   *DO,J,1,NF
+      *DO,O,1,NB    
+         L,(I-1)*NH+(J-1)*NB+O,I*NH+(J-1)*NB+O
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+
+! Start generating large nodes
+ALLSEL
+CSYS,0
+MAXT=15                         !Maximum number of connected trusses per large node
+*DIM,Num_T,ARRAY,Num_K,MAXT     !Define the number of lines (number of trusses) connected by large nodes
+*DIM,K_Py,ARRAY,Num_K,MAXT      !Define an array to store the vertices of the angle cone
+*DIM,K_Pyn,ARRAY,Num_K,MAXT     !Define an array to store the vertices of the new angle cone
+*DIM,K_Pyo,ARRAY,Num_K          !Define an array to store the center points of the angle cone
+
+*DO,NP,1,Num_K   !Cycle through each key point
+ 
+   Ord_T=
+   K_N=
+   Line_Int=
+   *DIM,Ord_T,ARRAY,MAXT,3            !Define an array to store the order of the truss lines,3 the line number, the distal key point number, and the conversion angle, respectively.
+   *DIM,K_N,ARRAY,MAXT                !Define an array to store normal control points
+   *DIM,Line_Int,ARRAY,MAXT,2,3       !Define an array of two possible intersecting lines, 2 for each side, 3 for the line numbers, and the two end point numbers
+
+   KSEL,S,KP,,NP
+   LSLK,S,0
+   KSLL,S
+   *GET,Num_T(NP),LINE,0,COUNT   !Number of wires (number of trusses) to obtain large node connections, not less than 3
+   *DO,I,1,Num_T(NP)      !Store arrays in line number order first
+      *GET,Nmin_L,LINE,0,NUM,MIN   !Get the minimum line number and nodes at both ends
+      *GET,KP1,LINE,Nmin_L,KP,1
+      *GET,KP2,LINE,Nmin_L,KP,2
+      Ord_T(I,1)=Nmin_L
+      *IF,KP1,EQ,NP,THEN
+         Ord_T(I,2)=KP2
+      *ELSEIF,KP2,EQ,NP
+         Ord_T(I,2)=KP1
+      *ENDIF
+      LSEL,U,LINE,,Nmin_L,,,0
+   *ENDDO
+   
+   !Generate a local cylindrical coordinate system for sorting
+   CSYS,0
+   LOCAL,100+NP,1,KX(NP),KY(NP),KZ(NP)
+   CSYS,100+NP
+   
+   !Convert and store angles
+   *DO,I,1,Num_T(NP)
+      *IF,KY(Ord_T(I,2)),LT,0,THEN
+         Ord_T(I,3)=KY(Ord_T(I,2))+360
+      *ELSE
+         Ord_T(I,3)=KY(Ord_T(I,2))
+      *ENDIF
+   *ENDDO
+   
+   KSEL,S,KP,,NP
+   LSLK,S,0
+   KSLL,S
+   
+   *DO,I,1,Num_T(NP)-1    !Begin reordering
+      *DO,J,1,Num_T(NP)-I
+         *IF,Ord_T(I,3),GT,Ord_T(I+J,3),THEN
+            TEMP1=Ord_T(I,1)
+            Ord_T(I,1)=Ord_T(I+J,1)
+            Ord_T(I+J,1)=TEMP1
+            TEMP2=Ord_T(I,2)
+            Ord_T(I,2)=Ord_T(I+J,2)
+            Ord_T(I+J,2)=TEMP2
+            TEMP3=Ord_T(I,3)
+            Ord_T(I,3)=Ord_T(I+J,3)
+            Ord_T(I+J,3)=TEMP3
+         *ENDIF
+      *ENDDO  
+   *ENDDO 
+   
+   !Establishment of local angle-parallel coordinate system for lifting and translating bars
+   *DO,I,1,Num_T(NP)    
+      *IF,I,EQ,1,THEN
+         I_FRONT=Num_T(NP)
+         I_BEHIND=I+1
+      *ELSEIF,I,EQ,Num_T(NP)
+         I_FRONT=I-1
+         I_BEHIND=1
+      *ELSE
+         I_FRONT=I-1
+         I_BEHIND=I+1
+      *ENDIF        
+      
+      !First establish the local coordinate system of the surface sandwiched by two adjacent lines and generate normal control points
+      CSKP,11,0,NP,Ord_T(I_FRONT,2),Ord_T(I,2)    
+      CSYS,11
+      K,,0,0,1
+      KP1=_RETURN
+      CSKP,12,0,NP,Ord_T(I,2),Ord_T(I_BEHIND,2)
+      CSYS,12
+      K,,0,0,1
+      KP2=_RETURN
+      K_N(I)=KP2   !Record the normal control points for each face
+      
+        
+      !Establishing an angular bisector coordinate system and lifting and translating the hypotenuse
+      *IF,Ord_T(I,1),LE,Num_L,THEN   !Exclude auxiliary lines
+         CSYS,0
+         KBETW,KP1,KP2,,RATIO,0.5
+         KP3=_RETURN
+         
+         CSKP,1000+Ord_T(I,1),0,NP,Ord_T(I,2),KP3
+         CSYS,1000+Ord_T(I,1)
+         K,,KX(NP),KY(NP)+H,KZ(NP)+B/2   
+         Line_Int(I,1,2)=_RETURN
+         K,,KX(Ord_T(I,2)),KY(Ord_T(I,2))+H,KZ(Ord_T(I,2))+B/2
+         Line_Int(I,1,3)=_RETURN
+         L,Line_Int(I,1,2),Line_Int(I,1,3)
+         Line_Int(I,1,1)=_RETURN
+         LEXTND,Line_Int(I,1,1),Line_Int(I,1,2),3*B,1    !Extension lines to determine if they intersect
+         Line_Int(I,1,1)=_RETURN
+         
+         K,,KX(NP),KY(NP)+H,KZ(NP)-B/2  
+         Line_Int(I,2,2)=_RETURN
+         K,,KX(Ord_T(I,2)),KY(Ord_T(I,2))+H,KZ(Ord_T(I,2))-B/2
+         Line_Int(I,2,3)=_RETURN
+         L,Line_Int(I,2,2),Line_Int(I,2,3)
+         Line_Int(I,2,1)=_RETURN
+         LEXTND,Line_Int(I,2,1),Line_Int(I,2,2),3*B,1    
+         Line_Int(I,2,1)=_RETURN  
+      *ENDIF   
+   *ENDDO
+   
+   FLAG=0
+   *DO,I,1,Num_T(NP)   !Exclude auxiliary lines, the default number of auxiliary lines per node is 1
+      *IF,Line_Int(I,1,1),EQ,0,THEN
+         *DO,J,I,Num_T(NP)
+            Line_Int(J,1,1)=Line_Int(J+1,1,1)
+            Line_Int(J,1,2)=Line_Int(J+1,1,2)
+            Line_Int(J,1,3)=Line_Int(J+1,1,3)
+            
+            Line_Int(J,2,1)=Line_Int(J+1,2,1)
+            Line_Int(J,2,2)=Line_Int(J+1,2,2)
+            Line_Int(J,2,3)=Line_Int(J+1,2,3)
+         *ENDDO   
+         FLAG=FLAG+1
+         Num_T(NP)=Num_T(NP)-1
+      *ENDIF
+      *IF,FLAG,GT,0,EXIT
+   *ENDDO
+   
+   !Generate angular cone vertices
+   BOPTN,KEEP,YES      !Whether to keep the original line after intersection
+   BOPTN,NWARN,1      !Do not intersect without generating a warning message
+   CSYS,0
+   *DO,T,1,Num_T(NP)
+      *IF,T,EQ,Num_T(NP),THEN
+         T1=T
+         T2=1
+      *ELSE
+         T1=T
+         T2=T+1         
+      *ENDIF   
+      
+      LSEL,NONE
+      KSEL,NONE
+      LSEL,S,LINE,,Line_Int(T1,2,1),,,0
+      LSEL,A,LINE,,Line_Int(T2,1,1),,,0
+      !KSLL
+      LINL,ALL     !Intersections only generate points, unlike laps
+      TEMP=_RETURN
+      *GET,KP_NEW,LINE,0,COUNT
+      *IF,KP_NEW,EQ,1,THEN      !judgment, and if it intersects, use the intersection
+         K_Py(NP,T)=TEMP
+      *ELSE                     !Do not intersect, and find the midpoint of the two perpendiculars.
+         
+         x1=KX(Line_Int(T1,2,2))   !Line L1
+         y1=KY(Line_Int(T1,2,2))
+         z1=KZ(Line_Int(T1,2,2))
+         x3=KX(Line_Int(T1,2,3))
+         y3=KY(Line_Int(T1,2,3))
+         z3=KZ(Line_Int(T1,2,3))
+         
+         m1=x3-x1   !Direction S1
+         n1=y3-y1
+         l1=z3-z1
+         
+         x2=KX(Line_Int(T2,1,2))   !Line L2
+         y2=KY(Line_Int(T2,1,2))
+         z2=KZ(Line_Int(T2,1,2))
+         x4=KX(Line_Int(T2,1,3))
+         y4=KY(Line_Int(T2,1,3))
+         z4=KZ(Line_Int(T2,1,3))
+         
+         m2=x4-x2   !Direction S2
+         n2=y4-y2
+         l2=z4-z2
+         
+         i=n1*l2-n2*l1   !Common perpendicular (line) direction S
+         j=l1*m2-l2*m1
+         k=m1*n2-n1*m2
+         
+         A1=n1*k-l1*j    !The plane π1 through L1 and parallel to S
+         B1=l1*i-m1*k
+         C1=m1*j-n1*i
+         D1=-x1*A1-y1*B1-z1*C1
+         
+         A2=n2*k-l2*j    !The plane π2 through L2 and parallel to S
+         B2=l2*i-m2*k
+         C2=m2*j-n2*i
+         D2=-x2*A2-y2*B2-z2*C2
+         
+         p=-(A1*x2+B1*y2+C1*z2+D1)/(A1*m2+B1*n2+C1*l2)   !The intersection of L2 with π1 , the common pendant 1
+         x5=p*m2+x2
+         y5=p*n2+y2
+         z5=p*l2+z2
+         
+         q=-(A2*x1+B2*y1+C2*z1+D2)/(A2*m1+B2*n1+C2*l1)   !L1 intersects π2 , the common pendant 2
+         x6=q*m1+x1
+         y6=q*n1+y1
+         z6=q*l1+z1
+         
+         K,,x5,y5,z5
+         KP1=_RETURN
+         K,,x6,y6,z6
+         KP2=_RETURN
+         KBETW,KP1,KP2,,RATIO,0.5   !Take the midpoint of the two common pendant points
+         K_Py(NP,T)=_RETURN    
+      *ENDIF
+   *ENDDO       
+   
+   !Generate the center point of the angle cone
+   x0=0   !Initialize the total vector components
+   y0=0
+   z0=0
+   CSYS,0
+   *DO,I,1,Num_T(NP)    !Find the total vector of adjacent face normals
+      x0=x0+KX(K_N(I))-KX(NP)  
+      y0=y0+KY(K_N(I))-KY(NP)
+      z0=z0+KZ(K_N(I))-KZ(NP) 
+   *ENDDO
+   
+   L_n0=sqrt(x0**2+y0**2+z0**2)  !Overall vector length
+   a=H/L_n0   !Proportional scaling of center point vector length to truss height H
+   
+   x=KX(NP)+a*x0
+   y=KY(NP)+a*y0
+   z=KZ(NP)+a*z0
+   
+   K,,x,y,z   !Generate center point
+   K_Pyo(NP)=_RETURN
+   
+   CSYS,0
+   !Determine the angle and radial length of adjacent 3-angle cone points to correct the problem of deformed angle cones
+   *DO,I,1,Num_T(NP)    
+      *IF,I,EQ,1,THEN
+         I_F=Num_T(NP)
+         I_B=I+1
+      *ELSEIF,I,EQ,Num_T(NP)
+         I_F=I-1
+         I_B=1
+      *ELSE
+         I_F=I-1
+         I_B=I+1
+      *ENDIF
+      
+      !Adjust angle and length limits to suit different problems
+      ANGLE=ANGLEK(K_Py(NP,I),K_Py(NP,I_F),K_Py(NP,I_B))   
+      *IF,ANGLE,LT,45,THEN
+         KBETW,K_Pyo(NP),K_Py(NP,I),,RATIO,0.5
+         K_Pyn(NP,I)=_RETURN
+      *ENDIF
+      
+      DISTANT=DISTKP(K_Py(NP,I),K_Pyo(NP))   
+      *IF,DISTANT,GT,2*M,THEN
+         KBETW,K_Pyo(NP),K_Py(NP,I),,RATIO,0.5
+         K_Pyn(NP,I)=_RETURN
+      *ELSEIF,DISTANT,GT,1.5*M
+         KBETW,K_Pyo(NP),K_Py(NP,I),,RATIO,0.67
+         K_Pyn(NP,I)=_RETURN
+      *ENDIF
+   *ENDDO
+
+*ENDDO
+
+
+!Remove all extraneous lines and points
+LSEL,NONE
+KSEL,NONE
+*DO,NL,1,Num_L   !Lower chord line
+   LSEL,A,LINE,,NL
+*ENDDO
+*DO,NP,1,Num_K
+   KSEL,A,KP,,NP   !Lower chord point
+   KSEL,A,KP,,K_Pyo(NP)  !Midpoint of a pyramid   
+   *DO,I,1,Num_T(NP)   
+      KSEL,A,KP,,K_Py(NP,I)
+      *IF,K_Pyn(NP,I),NE,0,THEN
+         KSEL,A,KP,,K_Pyn(NP,I)
+      *ENDIF
+   *ENDDO
+*ENDDO
+
+LSEL,INVE
+KSEL,INVE
+LDELE,ALL
+KDELE,ALL
+
+
+*DO,NP,1,Num_K   !Connection of angular conic lines
+
+   LSEL,NONE
+   KSEL,ALL
+   CSYS,0
+   *DO,I,1,Num_T(NP)   !Beveled edge lines and bottom radial lines
+      *IF,K_Pyn(NP,I),NE,0,THEN
+         KPY=K_Pyn(NP,I)
+         L,KPY,K_Py(NP,I)  !Consolidation of chord rods, here grouped as nodal rods
+      *ELSE
+         KPY=K_Py(NP,I)
+      *ENDIF
+      L,NP,KPY
+      L,K_Pyo(NP),KPY
+   *ENDDO
+   
+   *DO,I,1,Num_T(NP)   !Baseline
+      *IF,I,EQ,Num_T(NP),THEN
+         KPY1=K_Py(NP,I)
+         KPY2=K_Py(NP,1)
+         *IF,K_Pyn(NP,I),NE,0,THEN
+            KPY1=K_Pyn(NP,I)
+         *ENDIF
+         *IF,K_Pyn(NP,1),NE,0,THEN
+            KPY2=K_Pyn(NP,1)
+         *ENDIF
+      *ELSE
+         KPY1=K_Py(NP,I)
+         KPY2=K_Py(NP,I+1)
+         *IF,K_Pyn(NP,I),NE,0,THEN
+            KPY1=K_Pyn(NP,I)
+         *ENDIF
+         *IF,K_Pyn(NP,I+1),NE,0,THEN
+            KPY2=K_Pyn(NP,I+1)
+         *ENDIF
+      *ENDIF
+      L,KPY1,KPY2
+   *ENDDO
+   
+   L,NP,K_Pyo(NP)   !Through-line
+   LATT,1,,,,,,Loc_K(NP)  
+*ENDDO
+
+
+!Start generating trusses
+MAXK=200
+*DIM,K_T,ARRAY,Num_L,MAXK      !Define the array that stores the key points of the trusses
+
+*DO,NL,1,Num_L    !For each pole cycle
+
+   LSEL,S,LINE,,NL
+   KSLL,S
+   *GET,K_T(NL,1),LINE,NL,KP,1
+   *GET,K_T(NL,2),LINE,NL,KP,2
+   *DO,I,1,MAXT                               
+      *IF,K_Py(K_T(NL,1),I),NE,0,THEN
+         KSEL,A,KP,,K_Py(K_T(NL,1),I)
+      *ENDIF
+      *IF,K_Py(K_T(NL,2),I),NE,0,THEN
+         KSEL,A,KP,,K_Py(K_T(NL,2),I)
+      *ENDIF
+   *ENDDO
+   
+   CSYS,0
+   K,,LX(NL,0.5),LY(NL,0.5),LZ(NL,0.5)         !Generate auxiliary center point
+   K_T(NL,3)=_RETURN
+   CSYS,1000+NL
+   K,,KX(K_T(NL,3)),KY(K_T(NL,3))+H,KZ(K_T(NL,3))   
+   K_T(NL,4)=_RETURN 
+    
+   CSKP,1000+NL,0,K_T(NL,3),K_T(NL,4),K_T(NL,1)    !Re-establish the local coordinate system of the bar
+   CSYS,1000+NL
+   
+   !生成中间4个上弦点 
+   K,,KX(K_T(NL,4)),KY(K_T(NL,4))+M/2,KZ(K_T(NL,4))+B/2         
+   K_T(NL,5)=_RETURN
+   K,,KX(K_T(NL,4)),KY(K_T(NL,4))-M/2,KZ(K_T(NL,4))+B/2   
+   K_T(NL,6)=_RETURN
+   K,,KX(K_T(NL,4)),KY(K_T(NL,4))+M/2,KZ(K_T(NL,4))-B/2    
+   K_T(NL,7)=_RETURN                     
+   K,,KX(K_T(NL,4)),KY(K_T(NL,4))-M/2,KZ(K_T(NL,4))-B/2   
+   K_T(NL,8)=_RETURN 
+     
+   *DO,ND,5,8        !Generate chord points to both sides of the truss ends respectively
+      *IF,MOD(ND,2),EQ,1,THEN    
+         SIDE=1
+      *ELSE
+         SIDE=2
+      *ENDIF
+      O=ND-4
+      NNEAR%O%=0            
+      
+      MINDIST%O%=1000
+      *DO,I,1,MAXT     
+         *IF,K_Py(K_T(NL,SIDE),I),NE,0,THEN
+            *IF,ND,EQ,5,OR,ND,EQ,6,THEN   !Split both sides, avoid deformed angle cones, and pay attention to adjusting the Z-value tolerance
+               *IF,KZ(K_Py(K_T(NL,SIDE),I)),GT,0,AND,KZ(K_Py(K_T(NL,SIDE),I)),LE,KZ(K_T(NL,ND))+0.5*M,THEN
+                  KPDIST%O%=DISTKP(K_T(NL,ND),K_Py(K_T(NL,SIDE),I))      
+                  *IF,KPDIST%O%,LT,MINDIST%O%,THEN
+                     MINDIST%O%=KPDIST%O%
+                     NNEAR%O%=I
+                  *ENDIF
+               *ENDIF 
+            *ELSEIF,ND,EQ,7,OR,ND,EQ,8
+               *IF,KZ(K_Py(K_T(NL,SIDE),I)),LT,0,AND,KZ(K_Py(K_T(NL,SIDE),I)),GE,KZ(K_T(NL,ND))-0.5*M,THEN
+                  KPDIST%O%=DISTKP(K_T(NL,ND),K_Py(K_T(NL,SIDE),I))      
+                  *IF,KPDIST%O%,LT,MINDIST%O%,THEN
+                     MINDIST%O%=KPDIST%O%
+                     NNEAR%O%=I
+                  *ENDIF
+               *ENDIF 
+            *ENDIF
+         *ENDIF             
+      *ENDDO
+      
+      
+      KPYDIST%O%=ABS(KY(K_Py(K_T(NL,SIDE),NNEAR%O%))-KY(K_T(NL,3)))
+      
+      *IF,KPYDIST%O%,LE,0.65*M,THEN   !Determining if a truss is too short
+         I%O%=-1
+         KDELE,K_T(NL,ND)
+         K_T(NL,ND)=K_Py(K_T(NL,SIDE),NNEAR%O%)   
+      *ELSEIF,MINDIST%O%,LE,1.3*M   
+         I%O%=0               
+      *ELSE
+         *DO,I%O%,1,30       !Determine the number of ND series nodes generated
+            *IF,ND,EQ,5,THEN
+               K,,KX(K_T(NL,4)),KY(K_T(NL,4))+I%O%*M+M/2,KZ(K_T(NL,4))+B/2
+               K_T(NL,4*(I%O%-1)+ND+4)=_RETURN
+            *ELSEIF,ND,EQ,6
+               K,,KX(K_T(NL,4)),KY(K_T(NL,4))-I%O%*M-M/2,KZ(K_T(NL,4))+B/2
+               K_T(NL,4*(I%O%-1)+ND+4)=_RETURN
+            *ELSEIF,ND,EQ,7
+               K,,KX(K_T(NL,4)),KY(K_T(NL,4))+I%O%*M+M/2,KZ(K_T(NL,4))-B/2
+               K_T(NL,4*(I%O%-1)+ND+4)=_RETURN
+            *ELSE
+               K,,KX(K_T(NL,4)),KY(K_T(NL,4))-I%O%*M-M/2,KZ(K_T(NL,4))-B/2
+               K_T(NL,4*(I%O%-1)+ND+4)=_RETURN
+            *ENDIF
+            
+            FLAG%O%=0     !Used to mark whether an endpoint has been reached
+            
+            !Determine the distance of the node from the last point of the upper chord
+            MINDIST%O%=DISTKP(K_T(NL,4*(I%O%-1)+ND+4),K_Py(K_T(NL,SIDE),NNEAR%O%))      
+                    
+            *IF,MINDIST%O%,LE,1.3*M,THEN
+               FLAG%O%=FLAG%O%+1
+            *ENDIF
+            
+            *IF,FLAG%O%,GT,0,EXIT
+         *ENDDO
+      *ENDIF                  
+   *ENDDO
+ 
+   !Generate chord points     
+   minFLAG1=I1   !Determine the smallest number of both FLAG1 and FLAG2 to generate a truss at the 1 end of the control
+   *IF,I3,LT,minFLAG1,THEN
+      minFLAG1=I3
+   *ENDIF
+   minFLAG2=I2   !Determine the smallest number of both FLAG1 and FLAG2 to control the generation of trusses at the 2 ends
+   *IF,I4,LT,minFLAG2,THEN
+      minFLAG2=I4
+   *ENDIF
+   
+   LENLT=DISTKP(K_T(NL,1),K_T(NL,2))   !Chord length
+   
+   *IF,minFLAG1,GE,0,THEN   !Lower chord point, 1 end
+      *DO,K1,1,minFLAG1+1
+         KL,NL,0.5-K1*M/LENLT
+         K_T(NL,101+2*(K1-1))=_RETURN
+      *ENDDO
+      
+      DIST1=DISTKP(K_T(NL,1),K_T(NL,101+2*minFLAG1))   !Determine if an extra point is generated
+      *IF,DIST1,GE,1.3*M,THEN
+         KL,NL,0.5-(minFLAG1+1)*M/LENLT-DIST1/2/LENLT
+         K_T(NL,101+2*(minFLAG1+1))=_RETURN
+      *ENDIF
+   *ELSE
+      DIST1=DISTKP(K_T(NL,1),K_T(NL,3))   
+      *IF,DIST1,GE,1.3*M,THEN
+         KL,NL,0.5-DIST1/2/LENLT
+         K_T(NL,101)=_RETURN
+      *ENDIF
+   *ENDIF
+   
+   *IF,minFLAG2,GE,0,THEN   !2 end
+      *DO,K2,1,minFLAG2+1
+         KL,NL,0.5+K2*M/LENLT
+         K_T(NL,102+2*(K2-1))=_RETURN
+      *ENDDO
+      
+      DIST2=DISTKP(K_T(NL,2),K_T(NL,102+2*minFLAG2))
+      *IF,DIST2,GE,1.3*M,THEN
+         KL,NL,0.5+(minFLAG2+1)*M/LENLT+DIST2/2/LENLT
+         K_T(NL,102+2*(minFLAG2+1))=_RETURN
+      *ENDIF
+   *ELSE
+      DIST2=DISTKP(K_T(NL,2),K_T(NL,3))
+      *IF,DIST2,GE,1.3*M,THEN
+         KL,NL,0.5+DIST2/2/LENLT
+         K_T(NL,102)=_RETURN
+      *ENDIF
+   *ENDIF          
+   
+   LSEL,NONE
+   KSEL,ALL 
+
+   
+   !Start connecting cables
+   SecN=LSINQR(NL,-15)   !Returns the cross-section ID number of the selected line
+   *IF,SecN,GT,3000,THEN
+      THOU=3000
+   *ELSEIF,SecN,GT,2000
+      THOU=2000
+   *ELSE
+      THOU=1000
+   *ENDIF
+   HUN=SecN-THOU-MOD(SecN-THOU,100)
+   TEN=SecN-THOU-HUN-MOD(SecN-THOU-HUN,10)
+   
+   !Connecting intermediate bars
+   L,K_T(NL,5),K_T(NL,7)   !Intermediate chord crossbar
+   L,K_T(NL,6),K_T(NL,8)
+   LATT,1,,,,,,THOU+HUN+TEN+4   
+   LSEL,NONE
+   
+   L,K_T(NL,5),K_T(NL,3)   !center core (of midsection)
+   L,K_T(NL,7),K_T(NL,3)
+   *IF,minFLAG1,GE,0,THEN
+      L,K_T(NL,5),K_T(NL,101)
+      L,K_T(NL,7),K_T(NL,101)
+   *ENDIF
+   
+   L,K_T(NL,6),K_T(NL,3)
+   L,K_T(NL,8),K_T(NL,3)
+   *IF,minFLAG2,GE,0,THEN
+      L,K_T(NL,6),K_T(NL,102)
+      L,K_T(NL,8),K_T(NL,102)
+   *ENDIF
+   
+   LATT,1,,,,,,THOU+HUN+TEN+3
+   LSEL,NONE
+   
+   L,K_T(NL,5),K_T(NL,8)   !Intermediate diagonal bar
+   LATT,1,,,,,,THOU+HUN+TEN+5
+   LSEL,NONE
+   
+   L,K_T(NL,5),K_T(NL,6)   !Intermediate upper stringers
+   L,K_T(NL,7),K_T(NL,8)      
+   LATT,1,,,,,,THOU+HUN+TEN+1
+   LSEL,NONE
+   
+   !Connecting other rods
+   *DO,ND,5,8   !Upper chord
+      *IF,MOD(ND,2),EQ,1,THEN    !ND-series nodes
+         SIDE=1
+      *ELSE
+         SIDE=2
+      *ENDIF
+      O=ND-4
+      
+      *IF,I%O%,GE,0,THEN
+         *IF,I%O%,GE,1,THEN
+            *DO,J,1,I%O%
+               L,K_T(NL,4*(J-1)+ND),K_T(NL,4*J+ND)
+            *ENDDO
+         *ENDIF
+                  
+         L,K_T(NL,4*I%O%+ND),K_Py(K_T(NL,SIDE),NNEAR%O%)   !Last of the upper bars
+         LATT,1,,,,,,THOU+HUN+TEN+1
+         LSEL,NONE 
+      *ENDIF
+   *ENDDO              
+   
+
+   *DO,SIDE,1,2   !Chord crossbars and diagonal bars
+      ND1=SIDE+4
+      ND2=SIDE+6
+      O1=SIDE
+      O2=SIDE+2
+      ENDLINE1=0
+      ENDLINE2=0
+      
+      *IF,minFLAG%SIDE%,GE,1,THEN   !Upper chord crossbar
+         *DO,I,1,minFLAG%SIDE%
+            L,K_T(NL,4*I+ND1),K_T(NL,4*I+ND2)
+         *ENDDO
+         LATT,1,,,,,,THOU+HUN+TEN+4
+         LSEL,NONE 
+      *ENDIF
+      
+      *IF,minFLAG%SIDE%,GE,1,THEN   !Upper chord slanting bar
+         *DO,I,1,minFLAG%SIDE%
+            *IF,MOD(I,2),EQ,1,THEN
+               *IF,SIDE,EQ,1,THEN
+                  L,K_T(NL,4*(I-1)+ND1),K_T(NL,4*I+ND2) 
+                  ENDLINE1=I                               
+               *ELSE
+                  L,K_T(NL,4*I+ND1),K_T(NL,4*(I-1)+ND2)
+                  ENDLINE2=I   !Exchange ENDLINE here to avoid the last slash bar split case discussion
+               *ENDIF              
+            *ELSE              
+               *IF,SIDE,EQ,1,THEN
+                  L,K_T(NL,4*I+ND1),K_T(NL,4*(I-1)+ND2)
+                  ENDLINE2=I
+               *ELSE
+                  L,K_T(NL,4*(I-1)+ND1),K_T(NL,4*I+ND2)
+                  ENDLINE1=I
+               *ENDIF
+            *ENDIF
+         *ENDDO
+         LATT,1,,,,,,THOU+HUN+TEN+5
+         LSEL,NONE
+      *ELSEIF,minFLAG%SIDE%,EQ,0
+         *IF,SIDE,EQ,1,THEN
+            ENDLINE2=1
+         *ELSE
+            ENDLINE1=1
+         *ENDIF
+      *ENDIF      
+      
+      *IF,minFLAG%SIDE%,GE,0,THEN
+         *IF,I%O1%,EQ,I%O2%,THEN   !Last section of diagonal bar and crossbar
+            *IF,ENDLINE1,GT,ENDLINE2,THEN   !Determine the parity of the last segment of the diagonal bar
+               L,K_T(NL,4*I%O2%+ND2),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+            *ELSE
+               L,K_T(NL,4*I%O1%+ND1),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+            *ENDIF
+            LATT,1,,,,,,THOU+HUN+TEN+5
+            LSEL,NONE
+            
+            *IF,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),NE,0,AND,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),NE,0,THEN
+               L,K_Py(K_T(NL,SIDE),NNEAR%O1%),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               LATT,1,,,,,,THOU+HUN+TEN+4
+               LSEL,NONE
+               *IF,ENDLINE1,GT,ENDLINE2,THEN
+                  L,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+               *ELSE
+                  L,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               *ENDIF
+               LATT,1,,,,,,THOU+HUN+TEN+5
+               LSEL,NONE
+            *ENDIF
+         *ELSEIF,I%O1%,GT,I%O2%+1,AND,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),NE,0
+            *IF,ENDLINE1,GT,ENDLINE2,THEN
+               L,K_T(NL,4*I%O2%+ND2),K_T(NL,4*(I%O2%+1)+ND1)   !Note that here is I%O2%+1, to avoid problems caused by I%O1%>I%O2%+1, and the following is identical
+               L,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),K_T(NL,4*(I%O2%+1)+ND1)
+            *ELSE
+               L,K_T(NL,4*I%O2%+ND1),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               L,K_T(NL,4*(I%O2%+2)+ND1),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+            *ENDIF
+            LATT,1,,,,,,THOU+HUN+TEN+5
+            LSEL,NONE
+            
+            L,K_T(NL,4*(I%O2%+1)+ND1),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+            L,K_T(NL,4*(I%O2%+2)+ND1),K_Pyn(K_T(NL,SIDE),NNEAR%O2%)
+            LATT,1,,,,,,THOU+HUN+TEN+4
+            LSEL,NONE
+         *ELSEIF,I%O1%,GT,I%O2%
+            *IF,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),NE,0,THEN
+               *IF,ENDLINE1,GT,ENDLINE2,THEN
+                  L,K_T(NL,4*I%O2%+ND2),K_T(NL,4*(I%O2%+1)+ND1) 
+                  L,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),K_T(NL,4*(I%O2%+1)+ND1) 
+               *ELSE
+                  L,K_T(NL,4*I%O2%+ND1),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+                  L,K_Py(K_T(NL,SIDE),NNEAR%O1%),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               *ENDIF
+            *ELSE
+               *IF,ENDLINE1,GT,ENDLINE2,THEN
+                  L,K_T(NL,4*I%O2%+ND2),K_T(NL,4*(I%O2%+1)+ND1)  
+               *ELSE
+                  L,K_T(NL,4*I%O2%+ND1),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               *ENDIF
+            *ENDIF
+            LATT,1,,,,,,THOU+HUN+TEN+5
+            LSEL,NONE
+            
+            L,K_T(NL,4*(I%O2%+1)+ND1),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+            LATT,1,,,,,,THOU+HUN+TEN+4
+            LSEL,NONE
+         *ELSEIF,I%O1%+1,LT,I%O2%,AND,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),NE,0
+            *IF,ENDLINE1,GT,ENDLINE2,THEN
+               L,K_T(NL,4*I%O1%+ND2),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+               L,K_T(NL,4*(I%O1%+2)+ND2),K_Py(K_T(NL,SIDE),NNEAR%O1%)            
+            *ELSE
+               L,K_T(NL,4*I%O1%+ND1),K_T(NL,4*(I%O1%+1)+ND2)   
+               L,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),K_T(NL,4*(I%O1%+1)+ND2)
+            *ENDIF
+            LATT,1,,,,,,THOU+HUN+TEN+5
+            LSEL,NONE
+            
+            L,K_T(NL,4*(I%O1%+1)+ND2),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+            L,K_T(NL,4*(I%O1%+2)+ND2),K_Pyn(K_T(NL,SIDE),NNEAR%O1%)
+            LATT,1,,,,,,THOU+HUN+TEN+4
+            LSEL,NONE
+         *ELSEIF,I%O1%,LT,I%O2%
+            *IF,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),NE,0,THEN
+               *IF,ENDLINE1,GT,ENDLINE2,THEN
+                  L,K_T(NL,4*I%O1%+ND2),K_Py(K_T(NL,SIDE),NNEAR%O1%) 
+                  L,K_Py(K_T(NL,SIDE),NNEAR%O2%),K_Py(K_T(NL,SIDE),NNEAR%O1%) 
+               *ELSE
+                  L,K_T(NL,4*I%O1%+ND1),K_T(NL,4*(I%O1%+1)+ND2)
+                  L,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),K_T(NL,4*(I%O1%+1)+ND2)
+               *ENDIF
+            *ELSE
+               *IF,ENDLINE1,GT,ENDLINE2,THEN
+                  L,K_T(NL,4*I%O1%+ND2),K_Py(K_T(NL,SIDE),NNEAR%O1%)  
+               *ELSE
+                  L,K_T(NL,4*I%O1%+ND1),K_T(NL,4*(I%O1%+1)+ND2)
+               *ENDIF
+            *ENDIF
+            LATT,1,,,,,,THOU+HUN+TEN+5
+            LSEL,NONE
+            
+            L,K_Py(K_T(NL,SIDE),NNEAR%O1%),K_T(NL,4*(I%O1%+1)+ND2)
+            LATT,1,,,,,,THOU+HUN+TEN+4
+            LSEL,NONE
+         *ENDIF 
+      *ENDIF
+   *ENDDO
+   
+   *DO,SIDE,1,2   !Web
+      ND1=SIDE+4
+      ND2=SIDE+6
+      O1=SIDE
+      O2=SIDE+2
+
+      *IF,minFLAG%SIDE%,GE,1,THEN
+         *DO,I,1,minFLAG%SIDE%
+            L,K_T(NL,4*I+ND1),K_T(NL,2*(I-1)+100+SIDE)
+            L,K_T(NL,4*I+ND2),K_T(NL,2*(I-1)+100+SIDE)
+            L,K_T(NL,4*I+ND1),K_T(NL,2*I+100+SIDE)
+            L,K_T(NL,4*I+ND2),K_T(NL,2*I+100+SIDE)
+         *ENDDO
+         LATT,1,,,,,,THOU+HUN+TEN+3
+         LSEL,NONE
+      *ENDIF
+      
+      *IF,minFLAG%SIDE%,GE,0,THEN   !Webs close to the point of the angle cone
+         *IF,I%O1%,EQ,I%O2%,THEN
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+            *IF,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),NE,0,THEN
+               *IF,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),NE,0,AND,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),NE,0,THEN              
+                  L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+                  L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+                  L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Pyn(K_T(NL,SIDE),NNEAR%O1%)
+                  L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Pyn(K_T(NL,SIDE),NNEAR%O2%)
+               *ELSE
+                  L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+                  L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               *ENDIF            
+            *ENDIF
+         *ELSEIF,I%O1%,GT,I%O2%+1
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_T(NL,4*(I%O2%+1)+ND1)
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+            *IF,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),NE,0,AND,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),NE,0,THEN
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_T(NL,4*(I%O2%+1)+ND1)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_T(NL,4*(I%O2%+2)+ND1)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Pyn(K_T(NL,SIDE),NNEAR%O2%)
+            *ENDIF
+            L,K_T(NL,4*(I%O2%+2)+ND1),K_T(NL,SIDE)  
+         *ELSEIF,I%O1%,GT,I%O2%
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_T(NL,4*(I%O2%+1)+ND1)
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+            *IF,K_Pyn(K_T(NL,SIDE),NNEAR%O2%),NE,0,AND,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),NE,0,THEN
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_T(NL,4*(I%O2%+1)+ND1)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Pyn(K_T(NL,SIDE),NNEAR%O2%)
+            *ELSE
+               L,K_T(NL,4*(I%O2%+1)+ND1),K_T(NL,SIDE)  
+            *ENDIF            
+         *ELSEIF,I%O1%+1,LT,I%O2%
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_T(NL,4*(I%O1%+1)+ND2)
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+            *IF,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),NE,0,AND,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),NE,0,THEN
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_T(NL,4*(I%O1%+1)+ND2)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_T(NL,4*(I%O1%+2)+ND2)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Pyn(K_T(NL,SIDE),NNEAR%O1%)
+            *ENDIF
+            L,K_T(NL,4*(I%O1%+2)+ND2),K_T(NL,SIDE)   
+         *ELSEIF,I%O1%,LT,I%O2%
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_T(NL,4*(I%O1%+1)+ND2)
+            L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+            *IF,K_Pyn(K_T(NL,SIDE),NNEAR%O1%),NE,0,AND,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),NE,0,THEN
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_T(NL,4*(I%O1%+1)+ND2)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O1%)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Py(K_T(NL,SIDE),NNEAR%O2%)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_Pyn(K_T(NL,SIDE),NNEAR%O1%)
+            *ELSE
+               L,K_T(NL,4*(I%O1%+1)+ND2),K_T(NL,SIDE)  
+            *ENDIF            
+         *ENDIF
+         LATT,1,,,,,,THOU+HUN+TEN+6
+         LSEL,NONE
+      *ENDIF
+   *ENDDO
+   
+   LSEL,S,LINE,,NL
+   LDELE,NL
+   
+   
+   *DO,SIDE,1,2   !Lower chords
+      *IF,minFLAG%SIDE%,GE,0,THEN
+         L,K_T(NL,3),K_T(NL,100+SIDE)
+         LATT,1,,,,,,THOU+HUN+TEN+2
+         LSEL,NONE
+         *IF,minFLAG%SIDE%,GE,1,THEN
+            *DO,I,1,minFLAG%SIDE%
+               L,K_T(NL,2*(I-1)+100+SIDE),K_T(NL,2*I+100+SIDE)
+            *ENDDO
+            LATT,1,,,,,,THOU+HUN+TEN+2
+            LSEL,NONE
+            *IF,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),NE,0,THEN   !Lower chord bar near the corner cone point
+               L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_T(NL,SIDE)
+            *ELSE
+               L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_T(NL,SIDE)
+            *ENDIF
+            LATT,1,,,,,,THOU+HUN+TEN+7
+            LSEL,NONE        
+         *ELSEIF,minFLAG%SIDE%,EQ,0
+            *IF,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),NE,0,THEN
+               L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE)
+               L,K_T(NL,2*(minFLAG%SIDE%+1)+100+SIDE),K_T(NL,SIDE)
+            *ELSE
+               L,K_T(NL,2*minFLAG%SIDE%+100+SIDE),K_T(NL,SIDE)
+            *ENDIF
+            LATT,1,,,,,,THOU+HUN+TEN+7
+            LSEL,NONE 
+         *ENDIF         
+      *ELSE
+         *IF,K_T(NL,100+SIDE),NE,0,THEN   
+            L,K_T(NL,3),K_T(NL,100+SIDE)
+            L,K_T(NL,100+SIDE),K_T(NL,SIDE)
+         *ELSE
+            L,K_T(NL,3),K_T(NL,SIDE)
+         *ENDIF
+         LATT,1,,,,,,THOU+HUN+TEN+2      !This is considered as a normal lower chord bar
+         LSEL,NONE
+      *ENDIF            
+   *ENDDO
+   
+   KDELE,K_T(NL,4)
+     
+*ENDDO   
+
+ALLSEL
+*GET,Num_LA,LINE,O,COUNT    !Total number of lines obtained
+     
+!Mesh                                                                         
+CSYS,0                                                                           
+NUMDIV=3       !Number of rod divisions
+LESIZE,ALL,,,NUMDIV
+LMESH,ALL
+      
+Num_E=ELMIQR(0,14)       !Total number of units
+                                                                                  
+ALLSEL
+LSCLEAR,ALL           
+
+!Constrain
+csys,0
+
+*DO,I,NZ*NH+1,NZ*NH+NH 
+  DK,I,,,,,,UX,UY,UZ                            !Lower chord
+  
+  !上弦点
+  *do,x,2,3
+   *if,kz(K_Py(I,1)),gt,kz(K_Py(I,x)),then
+      kz0=K_Py(I,x)
+      K_Py(I,x)=K_Py(I,1)
+      K_Py(I,1)=kz0
+   *endif
+  *enddo  
+  
+  dk,K_Py(I,2),,,,,,ux,uy,uz
+  dk,K_Py(I,3),,,,,,ux,uy,uz
+*ENDDO  
+
+KSEL,NONE
+*DO,NL,1,Num_L   !Select all supersine and angular taper edge keypoint definition components for loading the
+   *DO,K,5,100
+      *IF,K_T(NL,K),NE,0,THEN
+         KSEL,A,KP,,K_T(NL,K)
+      *ENDIF
+   *ENDDO
+*ENDDO
+CM,K_Up,KP
+
+KSEL,NONE
+*DO,NP,1,Num_K   
+   *DO,T,1,MAXT
+      *IF,K_Py(NP,T),NE,0,THEN
+         KSEL,A,KP,,K_Py(NP,T)
+      *ENDIF
+   *ENDDO
+*ENDDO
+CM,K_Py,KP
+ 
+ALLSEL 
+
+DualNStab

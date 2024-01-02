@@ -1,0 +1,45 @@
+ME1=0.7E11        !Elastic Modulus
+PI=3.1415926
+!Structural design parameters
+Fy=260E6        !Yielding strength                                            
+StrRa_U=0.8     !Stress Ratio
+SleRa1=300      !Slenderness Ratio
+SleRa2=150      !Slenderness Ratio
+
+
+!Define the elements corresponding to each cross section
+*DO,AA,0,2
+   *DO,BB,1,NZ+1
+      *DO,CC,0,NB
+         *DO,DD,0,7
+            LSEL,S,SEC,,1000*AA+100*BB+10*CC+DD
+            NumS=1000*AA+100*BB+10*CC+DD
+            CM,NameofLine%NumS%,LINE     
+         *ENDDO
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+
+NumReal=50                !50 types of rods
+
+*DIM,LibSec1,,NumReal,4    !Define the array of angular taper bar sections 1
+*VREAD,LibSec1,SecLibr1,txt,,JIK,3,NumReal   !Read the cross-section library information, in order to facilitate the reading of data, steel pipe cross-section size reading data unit is mm
+(3F10.1) 
+
+
+*DO,O,1,7
+  NumSec=10*O
+  *DIM,LibSec%NumSec%,,NumReal,4    !Define truss rod section array 10*O
+  *VREAD,LibSec%NumSec%,SecLibr%NumSec%,txt,,JIK,3,NumReal   
+(3F10.1) 
+*ENDDO
+
+
+*DIM,LengElem_ST,ARRAY,Num_LA    !Define an array to hold the length of each pole cell
+
+
+*DO,I,1,Num_LA    !Cycle by number of bars
+  *GET,LengElem_ST(I),LINE,I,LENG          !Giving length to the bars
+*ENDDO
+

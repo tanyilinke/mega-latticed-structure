@@ -1,0 +1,170 @@
+!Surface loading program£¬2022.12.16
+!Wind load program, perpendicular to the sphere, 2019.4.4
+!Note the clockwise and counterclockwise import nodes
+
+/PREP7 
+
+DIRE=1      !Clockwise direction
+TOLE=-0.1   !Setting selection tolerance
+Wo=700      !The basic wind pressure is 0.7kN/m**2, and the roughness of the ground is class B.
+Bz=1.6      !The wind vibration coefficient is taken as 1.6
+
+CSYS,0
+Z0=KZ(Num_K)   !Height above ground
+
+!Innermost ring
+K,,0,0,KZ(K_Pyo(1))
+KPO=_RETURN
+*DO,I,1,NH
+   *IF,I,EQ,NH,THEN
+      I_F=I
+      I_B=1
+   *ELSE
+      I_F=I
+      I_B=I+1
+   *ENDIF
+   
+   KP1=KPO
+   KP2=K_Pyo(I_F)
+   KP3=K_Pyo(I_B)
+   
+   ALLSEL
+   CSYS,0
+   A=AREAKP(KP1,KP2,KP3)        
+   X1=(KX(KP1)+KX(KP2)+KX(KP3))/3   
+   Y1=(KY(KP1)+KY(KP2)+KY(KP3))/3     
+   Z1=(KZ(KP1)+KZ(KP2)+KZ(KP3))/3    
+   K,,X1,Y1,Z1
+   KDELE1=_RETURN  
+   DISTR=SQRT(X1**2+Y1**2+Z1**2)
+   Z2=Z1-Z0                 !The lowest part of the spherical shell is on the horizontal plane   
+   Uz=1.000*(Z2/10)**0.3    !Calculation of wind pressure height change factor
+   *IF,SKB,LE,0.25,THEN     !Determine the body size factor formula based on the sagittal-span ratio
+      Us=-(Z1/DISTR)**2
+   *ELSE
+      ALPHA=BETA/ABS(BETA)*Y1/(SQRT(Y1**2+X1**2))
+      Us=0.5*(1-(Z1/DISTR)**2)*ALPHA-(Z1/DISTR)**2
+   *ENDIF
+   Wk=Bz*Us*Uz*Wo*Phais
+   P=A*Wk
+
+   CMSEL,S,K_Up,KP
+   KSEL,A,KP,,KP1
+   KSEL,A,KP,,KP2
+   KSEL,A,KP,,KP3
+   
+   CSKP,11,0,KP1,KP2,KP3
+   KSEL,R,LOC,Y,TOLE,1000
+   CSKP,12,0,KP2,KP3,KP1
+   KSEL,R,LOC,Y,TOLE,1000
+   CSKP,13,0,KP3,KP1,KP2
+   KSEL,R,LOC,Y,TOLE,1000   
+   
+   KSEL,U,KP,,KP1
+   KSEL,U,KP,,KP2
+   KSEL,U,KP,,KP3
+   NSLK,S       
+   
+   *GET,NLOAD,NODE,0,COUNT 
+   CSYS,11       !Rotates the orientation of the currently selected node to the currently active coordinate system.
+   NROTAT,ALL
+   F,ALL,FZ,DIRE*P/NLOAD      
+   
+   ALLSEL
+   KDELE,KDELE1
+*ENDDO
+
+ALLSEL
+KDELE,KPO
+
+!Other rings
+*DO,I,1,NZ
+   *DO,J,1,NF
+      *DO,O,1,NB
+         *IF,J*O,EQ,NH,THEN
+            I1_F=(I-1)*NH+(J-1)*NB+O
+            I1_B=(I-1)*NH+1
+            I2_F=I*NH+(J-1)*NB+O
+            I2_B=I*NH+1
+         *ELSE
+            I1_F=(I-1)*NH+(J-1)*NB+O
+            I1_B=(I-1)*NH+(J-1)*NB+O+1
+            I2_F=I*NH+(J-1)*NB+O
+            I2_B=I*NH+(J-1)*NB+O+1
+         *ENDIF
+         
+         KBETW,K_Pyo(I1_F),K_Pyo(I2_F),,RATIO,0.5
+         KPM1=_RETURN
+         KBETW,K_Pyo(I1_B),K_Pyo(I2_B),,RATIO,0.5
+         KPM2=_RETURN 
+         KBETW,KPM1,KPM2,,RATIO,0.5
+         KPM=_RETURN    
+         
+         *DO,MM,1,4
+            *IF,MM,EQ,1,THEN
+               KP1=K_Pyo(I1_F)
+               KP2=K_Pyo(I2_F)
+            *ELSEIF,MM,EQ,2
+               KP1=K_Pyo(I2_F)
+               KP2=K_Pyo(I2_B)
+            *ELSEIF,MM,EQ,3
+               KP1=K_Pyo(I2_B)
+               KP2=K_Pyo(I1_B)
+            *ELSEIF,MM,EQ,4
+               KP1=K_Pyo(I1_B)
+               KP2=K_Pyo(I1_F)
+            *ENDIF  
+            
+            ALLSEL
+            CSYS,0
+            A=AREAKP(KP1,KP2,KPM)     
+            X1=(KX(KP1)+KX(KP2)+KX(KPM))/3     
+            Y1=(KY(KP1)+KY(KP2)+KY(KPM))/3    
+            Z1=(KZ(KP1)+KZ(KP2)+KZ(KPM))/3    
+            K,,X1,Y1,Z1
+            KDELE1=_RETURN  
+            DISTR=SQRT(X1**2+Y1**2+Z1**2)
+            Z2=Z1-Z0             
+            Uz=1.000*(Z2/10)**0.3   
+            *IF,SKB,LE,0.25,THEN    
+               Us=-(Z1/DISTR)**2
+            *ELSE
+               ALPHA=BETA/ABS(BETA)*Y1/(SQRT(Y1**2+X1**2))
+               Us=0.5*(1-(Z1/DISTR)**2)*ALPHA-(Z1/DISTR)**2
+            *ENDIF
+            Wk=Bz*Us*Uz*Wo*Phais
+            P=A*Wk
+            
+            CMSEL,S,K_Up,KP
+            KSEL,A,KP,,KP1
+            KSEL,A,KP,,KP2
+            KSEL,A,KP,,KPM
+            
+            CSKP,11,0,KP1,KP2,KPM
+            KSEL,R,LOC,Y,TOLE,1000
+            CSKP,12,0,KP2,KPM,KP1
+            KSEL,R,LOC,Y,TOLE,1000
+            CSKP,13,0,KPM,KP1,KP2
+            KSEL,R,LOC,Y,TOLE,1000   
+            
+            KSEL,U,KP,,KP1
+            KSEL,U,KP,,KP2
+            KSEL,U,KP,,KPM
+            NSLK,S       
+            
+            *GET,NLOAD,NODE,0,COUNT 
+            CSYS,11          
+            NROTAT,ALL
+            F,ALL,FZ,DIRE*P/NLOAD        
+            
+            ALLSEL
+            KDELE,KDELE1
+         *ENDDO
+         
+         ALLSEL
+         KDELE,KPM1
+         KDELE,KPM2
+         KDELE,KPM
+      *ENDDO
+   *ENDDO
+*ENDDO

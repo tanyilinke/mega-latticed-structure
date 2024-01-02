@@ -1,0 +1,43 @@
+!¡Á¡Á¡Á¡ÁEigenvalue Buckling£¬2016-10-02
+!Unit¡ª¡ª¡ª¡ªm-Kg-s
+FINISH
+ERR=1/100
+PMODI=50
+*DOWHILE,ERR
+ /PREP7
+ ACEL,,,0
+ FDELE,ALL,ALL
+ FCUM,ADD
+ ACEL,,,9.8     
+ QE=1000*PMODI
+ StLoad
+ FINISH
+
+ /SOLU
+ ALLSEL
+ ANTYPE,0
+ EQSLV,SPAR    !Choosing a sparse matrix direct solver
+ PSTRES,ON     !Turn on the prestressing option
+ SOLVE
+ FINISH
+
+ /SOLU
+ ANTYPE,1
+ BUCOPT,LANB,5    !Setting up the flexural mode extraction method and the number of modes to be extracted
+ MXPAND,5,,,1
+ SOLVE
+ *GET,FREQ1,MODE,1,FREQ
+ *IF,ABS(FREQ1-1),LE,ERR,THEN
+   *EXIT
+ *ELSE
+   PMODI=PMODI*FREQ1
+ *ENDIF
+ FINISH
+*ENDDO 
+
+/POST1
+SET,1,1
+PLDISP
+
+
+

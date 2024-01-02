@@ -1,0 +1,326 @@
+!!==============================Start rob selection==============================
+/PREP7
+SECN=NZ*NB*7+(NZ+1)*7+(NZ+1)*NB   !Calculate the total number of cross-section types
+LineData=
+*DIM,LineData,ARRAY,Num_LA,7    !Define the array LineData to record the bar information after the bar is preferred
+!LineData in order: line number, section number, stress ratio, aspect ratio, section ID number, axial force, maximum section number of the corresponding element
+DataBase=
+*DIM,DataBase,ARRAY,SECN,3   !Define an array DataBase to record information about the cross-section library where the largest cross-section of a rod element is located
+!DataBase in order: component number, section library number, section number
+OptSec=
+*DIM,OptSec,ARRAY,SECN,3   !Define an array to record the maximum cross-section outside diameter and wall thickness.
+
+NN=1
+*DO,AA,0,2
+   *DO,BB,1,NZ+1
+      *DO,CC,0,NB
+         *DO,DD,0,7
+            NumS=1000*AA+100*BB+10*CC+DD
+            CMSEL,S,NameofLine%NumS%      !Selection of components
+            *GET,NumALL,LINE,0,count   !Get the total number of selected rods
+            *IF,NumALL,EQ,0,THEN
+               *CYCLE
+            *ENDIF
+            
+            *IF,NumS,LT,1000,THEN
+               NumSec=1
+            *ELSE
+               NumSec=10*DD
+            *ENDIF
+            DataBase(NN,1)=NumS         !Record component number
+            DataBase(NN,2)=NumSec         !Record cross-section library number
+            
+            NumL=
+            *DIM,NumL,,NumALL          !Define the array to get the selected rods
+            *DO,K,1,NumALL             !For each rod cycle, sort the rod numbers from smallest to largest.
+               *get,NumL(K),LINE,0,num,MIN
+               LSEL,U,line,,NumL(K)
+            *ENDDO
+            
+            MaxSecN=1
+            *DO,K,1,NumALL    !For each rod cycle, rod selection is performed and NumE(I) represents the number of rods per cycle
+              LineData(NumL(K),1)=NumL(K)    !Record rod number
+              LineData(NumL(K),5)=NumS    !Record section ID
+              LSEL,S,LINE,,NumL(K)
+              ESLL,S
+              *get,MINEL,ELEM,0,num,MIN      
+              MAXMYI=ABS(MYI_ST(MINEL))
+              MAXMYJ=ABS(MYJ_ST(MINEL))
+              MAXMZI=ABS(MZI_ST(MINEL))
+              MAXMZJ=ABS(MZJ_ST(MINEL))
+              MAXMY=MAXMYI
+              *IF,MAXMYI,LT,MAXMYJ,THEN
+                 MAXMY=MAXMYJ
+              *ENDIF
+              MAXMZ=MAXMZI
+              *IF,MAXMZI,LT,MAXMZJ,THEN
+                 MAXMZ=MAXMZJ
+              *ENDIF
+              *DO,S,1,NUMDIV-1       
+                 *IF,ABS(MYI_ST(MINEL+S)),GT,MAXMY,THEN
+                    MAXMY=ABS(MYI_ST(MINEL+S))
+                 *ENDIF
+                 *IF,ABS(MYJ_ST(MINEL+S)),GT,MAXMY,THEN
+                    MAXMY=ABS(MYJ_ST(MINEL+S))
+                 *ENDIF
+                 *IF,ABS(MZI_ST(MINEL+S)),GT,MAXMZ,THEN
+                    MAXMZ=ABS(MZI_ST(MINEL+S))
+                 *ENDIF
+                 *IF,ABS(MZJ_ST(MINEL+S)),GT,MAXMZ,THEN
+                    MAXMZ=ABS(MZJ_ST(MINEL+S))
+                 *ENDIF
+              *ENDDO    
+              AxiForce=AxiFor_ST(MINEL)    
+              Length=LengElem_ST(NumL(K))   
+              MY1=MYI_ST(MINEL)
+              MY2=MYJ_ST(MINEL+NUMDIV-1)
+              MZ1=MZI_ST(MINEL)
+              MZ2=MZJ_ST(MINEL+NUMDIV-1)  
+              *DO,S,1,NumReal+1    !Section bank looping, start pole selection
+                 *IF,S,GT,NumReal,THEN
+                    S=NumReal
+                    SecNo=S    !Cross-section number of the unit
+                 *EXIT
+                 *ENDIF
+                 SecNo=S    !Cross-section number of the unit
+                 !Calculation of stabilization coefficients for bars, section type B (welded round tube), coefficients a1=0.65, a2=0.965, a3=0.300
+                 LibSec%NumSec%(SecNo,4)=LibSec%NumSec%(SecNo,2)-2*LibSec%NumSec%(SecNo,3)
+                 AreaSec=PI*(LibSec%NumSec%(SecNo,2)**2-LibSec%NumSec%(SecNo,4)**2)/(4E6)    !Calculate the cross-sectional area with attention to unit conversion.
+                 InerMom=PI*(LibSec%NumSec%(SecNo,2)**4-LibSec%NumSec%(SecNo,4)**4)/(64E12)   !Calculation of the moment of inertia of the cross-section
+                 IMd=InerMom/(LibSec%NumSec%(SecNo,2)/2E3)                             !Calculate the cross-section moment of inertia, the circular tube two directions cross-section moment of inertia is equal
+                 RaGy=SQRT(InerMom/AreaSec)    !Radius of gyration
+                 SleRa=Length/RaGy             !Slenderness ratio
+                 AxiFex=PI*PI*ME1*AreaSec/(1.2*SleRa*SleRa)  
+                 *IF,AxiForce,GE,0,THEN        !Axial force greater than or equal to 0 for tie rods
+                    StaCoe=1                  !stability coefficient
+                 *ELSE                         !compression bar
+                    !!!!!!!!!!!fitting formula
+                    tylk1=2.17943489111341E-12*SleRa**6
+                    tylk2=-1.02523515388029E-9*SleRa**5
+                    tylk3=1.74580003683457E-7*SleRa**4
+                    tylk4=-0.0000121795286319171*SleRa**3
+                    tylk5=0.000242152085042413*SleRa**2
+                    tylk6=-0.00386594309031807*SleRa
+                    StaCoe=tylk1+tylk2+tylk3+tylk4+tylk5+tylk6+1.01041364944277
+                  
+                 *ENDIF    
+              
+                 !!!!!!Calculate the design value of aluminum alloy strength
+                 Fd=220E6
+                 StrRa
+                 !Begin to determine if the stress ratio and aspect ratio meet the requirements
+                 *IF,StrRa,GT,StrRa_U,THEN
+                    *CYCLE    
+                 *ELSE
+                    *IF,AxiForce,GE,0,THEN    
+                       *IF,SleRa,LE,SleRa1,THEN
+                          *EXIT
+                       *ELSE
+                          *CYCLE
+                       *ENDIF
+                    *ELSE    
+                       *IF,SleRa,LE,SleRa2,THEN
+                          *EXIT
+                       *ELSE
+                          *CYCLE
+                        *ENDIF
+                    *ENDIF
+                 *ENDIF   
+              *ENDDO  
+              LineData(NumL(K),2)=SecNo    !Record the preferred post-section number
+              LineData(NumL(K),4)=SleRa    !Record the preferred length to slenderness ratio
+              *if,SecNo,GT,MaxSecN,then
+                 MaxSecN=SecNo
+              *endif
+           *ENDDO    !Ending the rod count cycle
+           DataBase(NN,3)=MaxSecN
+           NN=NN+1
+           *DO,K,1,NumALL             !Maximum section number assigned to the corresponding element
+              LineData(NumL(K),7)=MaxSecN    
+           *ENDDO 
+           CMSEL,NONE            
+         *ENDDO
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+
+!!==============================End of rob selection==============================
+ 
+!!==============================Update unit cross section, update by component
+
+*DO,I,1,SECN    
+    *IF,DataBase(I,1),NE,0,THEN
+       O=DataBase(I,1)       
+       ALLSEL
+       CMSEL,S,NameofLine%O%      
+       SECTYPE,DataBase(I,1),BEAM,CTUBE                       
+       secoffset,cent          
+       NameData=DataBase(I,2)
+       SECDATA,LibSec%NameData%(DataBase(I,3),2)/(2e3)-LibSec%NameData%(DataBase(I,3),3)/(1e3),LibSec%NameData%(DataBase(I,3),2)/(2e3)            
+       ESLL,S 
+       EMODIF,ALL,SECNUM,DataBase(I,1)   !Update the real constants for the entire element cell
+       esel,none
+       OptSec(I,1)=DataBase(I,1)
+       OptSec(I,2)=LibSec%NameData%(DataBase(I,3),2)/1000   !Conversion to metric
+       OptSec(I,3)=LibSec%NameData%(DataBase(I,3),3)/1000
+    *ENDIF
+*ENDDO  
+
+!Record the amount of aluminum used per cycle
+
+Num_Mass=
+*DIM,Num_Mass,,1,3  
+Num_Mass(1,1)=I1
+ALLSEL
+*GET,DEN,DENS,1                        
+MASSOFE=0
+*DO,I,1,Num_E
+   *GET,OMASSOFE,ELEM,I,VOLU
+   MASSOFE=MASSOFE+OMASSOFE*DEN
+*ENDDO                                 
+MASSOFE=MASSOFE/PI/(SPAN/2+B/2)**2
+Num_Mass(1,2)=MASSOFE
+
+
+*MWRITE,DataBase,DataBase%I1%,txt,,JIK,3,SECN           !Maximum cross-section number of the recording element
+(3F10.0)
+*MWRITE,OptSec,OptSec%I1%,txt,,JIK,3,SECN           !Maximum cross-section number of the recording element
+(3F10.3)
+
+!!!!!Calculations for updated bars
+ 
+
+/SOLU
+ANTYPE,0
+ALLSEL
+SOLVE
+FINISH
+
+
+/POST1
+ETABLE,FX,SMISC,1
+ETABLE,MYI,SMISC,2
+ETABLE,MYJ,SMISC,15
+ETABLE,MZI,SMISC,3
+ETABLE,MZJ,SMISC,16
+AxiFor_ST=    
+*DIM,AxiFor_ST,ARRAY,Num_E,1   
+MYI_ST=
+*DIM,MYI_ST,ARRAY,Num_E,1   
+MYJ_ST=
+*DIM,MYJ_ST,ARRAY,Num_E,1    
+MZI_ST=
+*DIM,MZI_ST,ARRAY,Num_E,1   
+MZJ_ST=
+*DIM,MZJ_ST,ARRAY,Num_E,1   
+
+
+*DO,I,1,Num_E
+   *GET,AxiFor_ST(I),ELEM,I,ETAB,FX    
+   *GET,MYI_ST(I),ELEM,I,ETAB,MYI   
+   *GET,MYJ_ST(I),ELEM,I,ETAB,MYJ   
+   *GET,MZI_ST(I),ELEM,I,ETAB,MZI  
+   *GET,MZJ_ST(I),ELEM,I,ETAB,MZJ   
+*ENDDO
+
+
+*DO,I,1,Num_LA    !For each rod cycle, rod selection is performed and NumE(I) represents the number of rods per cycle
+   LSEL,S,LINE,,I
+   ESLL,S
+   *get,MINEL,ELEM,0,num,MIN      
+   MAXMYI=ABS(MYI_ST(MINEL))
+   MAXMYJ=ABS(MYJ_ST(MINEL))
+   MAXMZI=ABS(MZI_ST(MINEL))
+   MAXMZJ=ABS(MZJ_ST(MINEL))
+   MAXMY=MAXMYI
+   MAXMZ=MAXMZI
+   *IF,MAXMYI,LT,MAXMYJ,THEN
+      MAXMY=MAXMYJ
+   *ENDIF
+   *IF,MAXMZI,LT,MAXMZJ,THEN
+      MAXMZ=MAXMZJ
+   *ENDIF
+   *DO,J,1,NUMDIV-1       
+     *IF,ABS(MYI_ST(MINEL+J)),GT,MAXMY,THEN
+        MAXMY=ABS(MYI_ST(MINEL+J))
+     *ENDIF
+     *IF,ABS(MYJ_ST(MINEL+J)),GT,MAXMY,THEN
+        MAXMY=ABS(MYJ_ST(MINEL+J))
+     *ENDIF
+     *IF,ABS(MZI_ST(MINEL+J)),GT,MAXMZ,THEN
+        MAXMZ=ABS(MZI_ST(MINEL+J))
+     *ENDIF
+     *IF,ABS(MZJ_ST(MINEL+J)),GT,MAXMZ,THEN
+        MAXMZ=ABS(MZJ_ST(MINEL+J))
+     *ENDIF
+   *ENDDO    !Get the maximum bending moment in both directions in the bar_absolute value
+   AxiForce=AxiFor_ST(MINEL)    
+   LineData(I,6)=AxiForce
+   Length=LengElem_ST(I)    
+   MY1=MYI_ST(MINEL)
+   MY2=MYJ_ST(MINEL+NUMDIV-1)
+   MZ1=MZI_ST(MINEL)
+   MZ2=MZJ_ST(MINEL+NUMDIV-1)  
+   !Get the cross-section library number
+   *IF,LineData(I,5),LT,1000,THEN
+      NumSec=1
+   *ELSE
+      TEN=MOD(LineData(I,5),10)
+      NumSec=TEN*10
+   *ENDIF
+   SecNo=LineData(I,7)    !Cross-section number of the unit
+   
+   LibSec%NumSec%(SecNo,4)=LibSec%NumSec%(SecNo,2)-2*LibSec%NumSec%(SecNo,3)
+   AreaSec=PI*(LibSec%NumSec%(SecNo,2)**2-LibSec%NumSec%(SecNo,4)**2)/(4E6)    
+   InerMom=PI*(LibSec%NumSec%(SecNo,2)**4-LibSec%NumSec%(SecNo,4)**4)/(64E12)  
+   IMd=InerMom/(LibSec%NumSec%(SecNo,2)/2E3)                            
+   RaGy=SQRT(InerMom/AreaSec)    
+   SleRa=Length/RaGy            
+   AxiFex=PI*PI*ME1*AreaSec/(1.2*SleRa*SleRa)    
+   *IF,AxiForce,GE,0,THEN       
+      StaCoe=1                  
+   *ELSE                        
+   !!!!!!ÄâºÏ¹«Ê½
+      tylk1=2.17943489111341E-12*SleRa**6
+      tylk2=-1.02523515388029E-9*SleRa**5
+      tylk3=1.74580003683457E-7*SleRa**4
+      tylk4=-0.0000121795286319171*SleRa**3
+      tylk5=0.000242152085042413*SleRa**2
+      tylk6=-0.00386594309031807*SleRa
+      StaCoe=tylk1+tylk2+tylk3+tylk4+tylk5+tylk6+1.01041364944277
+       
+   *ENDIF   
+   
+    
+   Fd=220E6
+   StrRa    
+   LineData(I,3)=StrRa
+*ENDDO   
+
+ 
+ALLSEL
+*GET,DEN,DENS,1                       
+   MASSOFE=0
+*DO,I,1,Num_E
+   *GET,OMASSOFE,ELEM,I,VOLU
+   MASSOFE=MASSOFE+OMASSOFE*DEN
+*ENDDO                                 !The above is the total aluminum usage calculated after the unit update.
+MASSOFE=MASSOFE/PI/(SPAN/2+B/2)**2
+Num_Mass(1,3)=MASSOFE
+
+
+*MWRITE,Num_Mass,MassofSec%I1%,txt,,JIK,3,1           !Record aluminum usage
+(F10.0,F15.1,F15.1)
+  
+
+*MWRITE,LineData,LineData%I1%,txt,,JIK,7,Num_LA    !Record LINEData
+(F10.0,F10.0,F15.6,F15.3,F10.0,F15.1,F10.0)
+
+FINISH
+
+
+
+
+   
+

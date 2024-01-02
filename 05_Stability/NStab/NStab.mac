@@ -1,0 +1,166 @@
+!¡Á¡Á¡Á¡ÁGeometric nonlinear stability (cyclic acquisition of descending segments), 2020-5-17
+!Unit¡ª¡ª¡ª¡ªm-Kg-s-degree
+
+FINISH
+!/FILNAME,NStab
+/CONFIG,NRES,1E5    
+/uis,msgpop,3
+/nerr,0
+
+ALLSEL
+*GET,DEN,DENS,1                       
+MASSOFE=0
+PI=3.1415926
+*DO,I,1,Num_E
+   *GET,OMASSOFE,ELEM,I,VOLU
+   MASSOFE=MASSOFE+OMASSOFE*DEN
+*ENDDO                                
+MASSOFE=MASSOFE/PI/(SPAN/2+B/2)**2
+SELFWEI=MASSOFE*9.8/1000               !Calculation of structural deadweight in kN/m2
+
+Fac_Firs=30
+
+maxdisp_flag=0     !Maximum displacement in the cycle
+maxdisp_sub=0      !Maximum displacement corresponding to the number of substeps
+float_val=0.01     !load float value
+
+
+*do,numsub,200,500,100
+	
+	finish
+	disp_max=     
+	load_max=	
+		
+	/PREP7
+		ALLSEL
+		ACEL,,,0 
+		FDELE,ALL,ALL    
+		FCUM,ADD 
+		ACEL,,,9.8      
+		QE=1000*Fac_Firs
+		StLoad
+	FINISH
+	
+	/SOLU
+		ALLSEL
+		ANTYPE,0
+		NLGEOM,1            
+		OUTRES,ALL,ALL      
+		ARCLEN,ON           !Turn on the arc length method switch
+		!ARCTRM,U,50,1,UZ   
+		NSUBST,numsub          !Setting the number of load sub-steps
+		!NEQIT,15          
+		!NCNV,2
+		allsel
+		solve
+	FINISH
+	
+	/POST1
+		SET,LAST
+		NSORT,U,SUM,0,0,ALL                 !Sort the sum of displacement vectors for all nodes
+		*GET,USumNon,SORT,0,MAX             
+		*GET,USumNonNum,SORT,0,IMAX        
+	FINISH
+	
+	/POST26
+		NSOL,2,USumNonNum,U,Z,Deflection    !Specify variable 2 as the vertical displacement of the maximum displacement node
+		PROD,4,2,,,,,,-1,1,1                
+		PROD,5,1,,,,,,(Fac_Firs+SELFWEI),1,1  !Stabilization factor multiplied by time, load
+		numarr=500                          
+		*dim,disp_max,array,numarr           !Define an array to store the maximum displacement
+		*dim,load_max,array,numarr           !Define an array to store the maximum load
+		vget,disp_max(1),4                     !Read the data from variable 4 into the array disp_max
+		vget,load_max(1),5                     !Read the data from variable 5 into the array load_max
+		
+		!Start analyzing data
+		numdata=0     
+		*do,i,1,numarr    !Get the number of data points
+			*if,disp_max(i),eq,0,then
+				*exit
+			*else
+				numdata=i
+			*endif
+		*enddo
+		
+		disp_max(numdata)=0     
+		load_max(numdata)=0
+		numdata=numdata-1
+		
+		maxload=0     
+		nmaxload=0    
+		maxdisp=0      
+		
+		*do,i,1,numdata     !Obtaining the maximum load
+			*if,load_max(i),gt,maxload,then
+				maxload=load_max(i)          
+				nmaxload=i                   
+			*endif                         
+		*enddo			                     
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!		
+	FINISH
+		
+	!!!The maximum displacement node in the last step is different from the one at the maximum load, reassigning the values
+	/POST1
+		SET,1,nmaxload
+		NSORT,U,Z,0,0,ALL                 !Sort the sum of displacement vectors for all nodes
+		*GET,UzNon,SORT,0,MIN             
+		*GET,UzNonNum,SORT,0,IMIN        
+	FINISH
+	
+	/POST26
+		NSOL,2,UzNonNum,U,Z,Deflection    
+		PROD,4,2,,,,,,-1,1,1              
+
+		vget,disp_max(1),4                  
+
+	disp_max(numdata+1)=0                       
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!	
+		*do,i,1,numdata     !Getting the maximum displacement
+			*if,disp_max(i),gt,maxdisp,then
+				maxdisp=disp_max(i)
+			*endif
+		*enddo
+		
+		*if,maxdisp,gt,maxdisp_flag,then
+			maxdisp_flag=maxdisp     !Mark
+			maxdisp_sub=numsub
+		*endif
+		 
+		*if,disp_max(numdata),lt,maxdisp,then     !Determine whether to drift back
+			key=1
+		*else
+			key=0
+		*endif
+				
+		*if,key,eq,1,then     !drift back
+			writefile
+			*cycle			
+		*else     !refrain from drifting off				
+			!Determining if there is an inflection point
+			*if,load_max(nmaxload)-load_max(numdata),gt,float_val,then     !A true inflection point
+				writefile
+				*exit				
+			*else     !No inflection point or floating values				
+				writefile	
+				*cycle		
+			*endif														
+		*endif	
+
+*enddo
+		
+FINISH
+		
+/post26				
+/AXLAB,X,Displacement              !Specify the name of the horizontal coordinate
+/AXLAB,Y,Load
+XVAR,4
+PLVAR,5
+		
+FINISH
+	
+	
+
+
+
+
+

@@ -1,0 +1,9 @@
+*CFOPEN,disp%numsub%,txt 
+*VWRITE,disp_max(1)         
+(f10.6) 
+*CFCLOSE
+
+*CFOPEN,load%numsub%,txt 
+*VWRITE,load_max(1)         
+(f10.6) 
+*CFCLOSE

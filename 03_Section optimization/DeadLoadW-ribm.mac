@@ -1,0 +1,143 @@
+!Surface loading program£¬2022.12.16
+!Full-span constant loads, combined with wind loads, 2019.4.20
+/PREP7 
+
+TOLE=-0.1   !Set the selection tolerance
+
+ET,6,MASS21,,,2   !Establishment of quality elements
+RNUM=1
+
+CSYS,0
+ALLSEL
+NROTAT,ALL
+
+!Innermost ring
+CSYS,0
+K,,0,0,KZ(K_Pyo(1))
+KPO=_RETURN
+
+*DO,I,1,NH
+
+   *IF,I,EQ,NH,THEN
+      I_F=I
+      I_B=1
+   *ELSE
+      I_F=I
+      I_B=I+1
+   *ENDIF
+   
+   KP1=KPO
+   KP2=K_Pyo(I_F)
+   KP3=K_Pyo(I_B)
+   
+   ALLSEL
+   A=AREAKP(KP1,KP2,KP3)
+   P=A*QE1
+   M=P/G
+
+   CMSEL,S,K_Up,KP
+
+   KSEL,A,KP,,KP1
+   KSEL,A,KP,,KP2
+   KSEL,A,KP,,KP3
+   
+   CSKP,11,0,KP1,KP2,KP3
+   KSEL,R,LOC,Y,TOLE,1000
+   CSKP,12,0,KP2,KP3,KP1
+   KSEL,R,LOC,Y,TOLE,1000
+   CSKP,13,0,KP3,KP1,KP2
+   KSEL,R,LOC,Y,TOLE,1000   
+   
+   KSEL,U,KP,,KP1
+   KSEL,U,KP,,KP2
+   KSEL,U,KP,,KP3
+   
+   *GET,KLOAD,KP,0,COUNT       
+   R,1000+RNUM,M/KLOAD
+   KATT,,1000+RNUM,6         
+   KMESH,ALL
+   
+   RNUM=RNUM+1 
+   
+*ENDDO
+
+ALLSEL
+KDELE,KPO
+
+!Other rings
+*DO,I,1,NZ
+   *DO,J,1,NF
+      *DO,O,1,NB
+         *IF,J*O,EQ,NH,THEN
+            I1_F=(I-1)*NH+(J-1)*NB+O
+            I1_B=(I-1)*NH+1
+            I2_F=I*NH+(J-1)*NB+O
+            I2_B=I*NH+1
+         *ELSE
+            I1_F=(I-1)*NH+(J-1)*NB+O
+            I1_B=(I-1)*NH+(J-1)*NB+O+1
+            I2_F=I*NH+(J-1)*NB+O
+            I2_B=I*NH+(J-1)*NB+O+1
+         *ENDIF
+         
+         KBETW,K_Pyo(I1_F),K_Pyo(I2_F),,RATIO,0.5
+         KPM1=_RETURN
+         KBETW,K_Pyo(I1_B),K_Pyo(I2_B),,RATIO,0.5
+         KPM2=_RETURN 
+         KBETW,KPM1,KPM2,,RATIO,0.5
+         KPM=_RETURN         
+         
+         *DO,MM,1,4
+            *IF,MM,EQ,1,THEN
+               KP1=K_Pyo(I1_F)
+               KP2=K_Pyo(I2_F)
+            *ELSEIF,MM,EQ,2
+               KP1=K_Pyo(I2_F)
+               KP2=K_Pyo(I2_B)
+            *ELSEIF,MM,EQ,3
+               KP1=K_Pyo(I2_B)
+               KP2=K_Pyo(I1_B)
+            *ELSEIF,MM,EQ,4
+               KP1=K_Pyo(I1_B)
+               KP2=K_Pyo(I1_F)
+            *ENDIF  
+            
+            ALLSEL
+            A=AREAKP(KP1,KP2,KPM)
+            P=A*QE1
+            M=P/G
+            
+            CMSEL,S,K_Up,KP
+
+            KSEL,A,KP,,KP1
+            KSEL,A,KP,,KP2
+            KSEL,A,KP,,KPM
+            
+            CSKP,11,0,KP1,KP2,KPM
+            KSEL,R,LOC,Y,TOLE,1000
+            CSKP,12,0,KP2,KPM,KP1
+            KSEL,R,LOC,Y,TOLE,1000
+            CSKP,13,0,KPM,KP1,KP2
+            KSEL,R,LOC,Y,TOLE,1000   
+            
+            KSEL,U,KP,,KP1
+            KSEL,U,KP,,KP2
+            KSEL,U,KP,,KPM
+            
+            *GET,KLOAD,KP,0,COUNT       
+            R,1000+RNUM,M/KLOAD
+            KATT,,1000+RNUM,6         
+            KMESH,ALL
+            
+            RNUM=RNUM+1
+         *ENDDO
+         
+         ALLSEL
+         KDELE,KPM1
+         KDELE,KPM2
+         KDELE,KPM
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+

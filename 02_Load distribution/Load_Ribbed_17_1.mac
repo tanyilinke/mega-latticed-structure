@@ -1,0 +1,87 @@
+!Load distributin:Ribbed£¨2022.12.26£©
+FINISH       
+/CLEAR,START     
+!/FILENAME,MainPro 
+*AFUN,DEG            !Use units of degrees in the input and output of the angle function
+/UIS,MSGPOP,3    !Block warning messages
+
+!Geometric parameters
+NF=20                  !Number of peaks
+NB=1                   !Number of divisions per side
+NH=NF*NB               !Number of circumferential divisions
+NZ=6                   !Number of radial divisions (note not more than 9)
+SELFWEI=0.6            !Estimated deadweight
+   
+QE2=0.5*1.5*0.7/1000     !Live load£¬unit£ºMN/©O
+QE1=(SELFWEI+0.7)*1.3/1000   !Dead load£¬unit£ºMN/©O
+
+Num_K=NH*(NZ+1)        !Number of keypoints
+
+
+!Import keypoint coordinates, unit: mm
+*DIM,NodeCor_x,ARRAY,Num_K
+*VREAD,NodeCor_x,Ribbed_17_1_x,txt
+(F12.0)
+
+*DIM,NodeCor_y,ARRAY,Num_K
+*VREAD,NodeCor_y,Ribbed_17_1_y,txt
+(F12.0)
+
+*DIM,NodeCor_z,ARRAY,Num_K
+*VREAD,NodeCor_z,Ribbed_17_1_z,txt
+(F12.0)
+
+
+/PREP7
+CSYS,0           
+
+!Generate keypoints, starting from the innermost circle of crest nodes
+!Note the clockwise and counterclockwise import nodes, here clockwise
+*DO,I,1,NZ+1
+   *DO,J,1,NF
+      *DO,O,1,NB
+         X=NodeCor_x((I-1)*NH+(J-1)*NB+O)/1000
+         Y=NodeCor_y((I-1)*NH+(J-1)*NB+O)/1000
+         Z=NodeCor_z((I-1)*NH+(J-1)*NB+O)/1000
+         K,(I-1)*NH+(J-1)*NB+O,X,Y,Z
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+!Radial rod connection
+*DO,I,1,NZ
+   *DO,J,1,NF
+      *DO,O,1,NB
+         L,(I-1)*NH+(J-1)*NB+O,I*NH+(J-1)*NB+O
+      *ENDDO
+   *ENDDO
+*ENDDO
+
+!Circumferential rod connection
+*DO,I,1,NZ+1
+   *DO,J,1,NH-1
+      L,(I-1)*NH+J,(I-1)*NH+J+1
+   *ENDDO
+   L,(I-1)*NH+NH,(I-1)*NH+1
+*ENDDO
+
+ALLSEL
+*GET,Num_L,LINE,0,COUNT      !Getting the total number of lower chord bars
+
+!Start load calculation
+CSYS,0
+ALLSEL
+*DIM,Load_K,ARRAY,Num_K       !Define arrays to record critical point loads
+
+!Load
+LiveLoad-ribm
+DeadLoad-ribm
+
+*DIM,LOAD,ARRAY,NZ+1,NB     !Storage represents point loads
+*DO,I,1,NZ+1
+   *DO,J,1,NB
+      LOAD(I,J)=Load_K(NH*(I-1)+J)
+   *ENDDO
+*ENDDO
+
+ALLSEL

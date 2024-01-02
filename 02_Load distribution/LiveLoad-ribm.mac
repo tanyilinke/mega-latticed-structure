@@ -1,0 +1,87 @@
+
+!Innermost ring
+CSYS,0
+K,,0,0,KZ(1)
+KPO=_RETURN
+*DO,I,1,NH
+   *IF,I,EQ,NH,THEN
+      I_F=I
+      I_B=1
+   *ELSE
+      I_F=I
+      I_B=I+1
+   *ENDIF
+   
+   KP1=KPO
+   KP2=I_F
+   KP3=I_B
+   
+   ALLSEL
+   CSYS,0
+   COSI=ABS(NORMKZ(KP1,KP2,KP3))
+   A=AREAKP(KP1,KP2,KP3)*COSI      !Projected area is used for live loads
+   P=A*QE2   
+
+   Load_K(KP2)=Load_K(KP2)+P/2
+   Load_K(KP3)=Load_K(KP3)+P/2
+*ENDDO
+
+ALLSEL
+KDELE,KPO
+
+!Other rings
+*DO,I,1,NZ
+   *DO,J,1,NF
+      *DO,O,1,NB
+         *IF,J*O,EQ,NH,THEN
+            I1_F=(I-1)*NH+(J-1)*NB+O
+            I1_B=(I-1)*NH+1
+            I2_F=I*NH+(J-1)*NB+O
+            I2_B=I*NH+1
+         *ELSE
+            I1_F=(I-1)*NH+(J-1)*NB+O
+            I1_B=(I-1)*NH+(J-1)*NB+O+1
+            I2_F=I*NH+(J-1)*NB+O
+            I2_B=I*NH+(J-1)*NB+O+1
+         *ENDIF
+         
+         KBETW,I1_F,I2_F,,RATIO,0.5
+         KPM1=_RETURN
+         KBETW,I1_B,I2_B,,RATIO,0.5
+         KPM2=_RETURN 
+         KBETW,KPM1,KPM2,,RATIO,0.5
+         KPM=_RETURN         
+         
+         *DO,MM,1,4
+            *IF,MM,EQ,1,THEN
+               KP1=I1_F
+               KP2=I2_F
+            *ELSEIF,MM,EQ,2
+               KP1=I2_F
+               KP2=I2_B
+            *ELSEIF,MM,EQ,3
+               KP1=I2_B
+               KP2=I1_B
+            *ELSEIF,MM,EQ,4
+               KP1=I1_B
+               KP2=I1_F
+            *ENDIF                         
+            
+            ALLSEL
+            CSYS,0
+            COSI=ABS(NORMKZ(KP1,KP2,KPM))
+            A=AREAKP(KP1,KP2,KPM)*COSI      !Projected area is used for live loads
+            P=A*QE2
+            
+            Load_K(KP1)=Load_K(KP1)+P/2
+            Load_K(KP2)=Load_K(KP2)+P/2
+         *ENDDO
+         
+         ALLSEL
+         KDELE,KPM1
+         KDELE,KPM2
+         KDELE,KPM
+      *ENDDO
+   *ENDDO
+*ENDDO
+
